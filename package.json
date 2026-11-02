@@ -1,0 +1,1 @@
+{"name":"web-2048","version":"1.0.0","description":"2048 web game with test coverage","main":"game.js","scripts":{"test":"jest --verbose"},"repository":{"type":"git","url":"git+https://github.com/yuanmengfan528/web-2048.git"},"keywords":["2048","game","testing"],"author":"yuanmengfan528","license":"ISC","type":"commonjs"}
