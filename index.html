@@ -1,1 +1,355 @@
-<html placeholder>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>2048</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+    background: #faf8ef;
+    display: flex; flex-direction: column; align-items: center;
+    color: #776e65; user-select: none; overflow: hidden;
+    touch-action: none;
+  }
+  .wrap { width: min(92vw, 480px); margin-top: 4vh; }
+
+  header { display: flex; justify-content: space-between; align-items: center; }
+  h1 { font-size: 64px; font-weight: 800; letter-spacing: -2px; }
+
+  .scores { display: flex; gap: 8px; }
+  .score-box {
+    background: #bbada0; border-radius: 6px; padding: 6px 16px;
+    text-align: center; color: #fff; min-width: 84px; position: relative;
+  }
+  .score-box .label { font-size: 11px; letter-spacing: 2px; color: #eee4da; }
+  .score-box .value { font-size: 22px; font-weight: 700; }
+  .score-add {
+    position: absolute; left: 0; right: 0; top: 4px;
+    font-size: 20px; font-weight: 700; color: rgba(119,110,101,.9);
+    animation: floatUp .6s ease-in forwards; pointer-events: none;
+  }
+  @keyframes floatUp {
+    0% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-30px); }
+  }
+
+  .sub { display: flex; justify-content: space-between; align-items: center; margin: 14px 2px; }
+  .sub p { font-size: 14px; color: #8f8579; }
+  .btn {
+    background: #8f7a66; color: #f9f6f2; border: none; border-radius: 6px;
+    padding: 10px 18px; font-size: 15px; font-weight: 700; cursor: pointer;
+    transition: filter .15s;
+  }
+  .btn:hover { filter: brightness(1.1); }
+
+  .board {
+    position: relative; background: #bbada0; border-radius: 8px;
+    width: 100%; aspect-ratio: 1; padding: var(--gap);
+    --gap: 10px;
+  }
+  .grid-bg {
+    position: absolute; inset: var(--gap);
+    display: grid; grid-template: repeat(4,1fr)/repeat(4,1fr); gap: var(--gap);
+  }
+  .grid-bg div { background: rgba(238,228,218,.35); border-radius: 6px; }
+
+  .tiles { position: absolute; inset: var(--gap); }
+  .tile {
+    position: absolute; border-radius: 6px;
+    transition: transform .12s ease-in-out;
+    will-change: transform;
+  }
+  .tile .inner {
+    width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+    border-radius: 6px; font-weight: 800;
+  }
+  .tile.spawn .inner { animation: spawn .18s ease backwards; }
+  @keyframes spawn { from { transform: scale(0); } to { transform: scale(1); } }
+  .tile.merged .inner { animation: pop .18s ease; }
+  @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+
+  .t2    { background:#eee4da; color:#776e65; }
+  .t4    { background:#ede0c8; color:#776e65; }
+  .t8    { background:#f2b179; color:#f9f6f2; }
+  .t16   { background:#f59563; color:#f9f6f2; }
+  .t32   { background:#f67c5f; color:#f9f6f2; }
+  .t64   { background:#f65e3b; color:#f9f6f2; }
+  .t128  { background:#edcf72; color:#f9f6f2; }
+  .t256  { background:#edcc61; color:#f9f6f2; }
+  .t512  { background:#edc850; color:#f9f6f2; }
+  .t1024 { background:#edc53f; color:#f9f6f2; }
+  .t2048 { background:#edc22e; color:#f9f6f2; box-shadow: 0 0 24px 4px rgba(243,215,116,.55); }
+  .tsuper{ background:#3c3a32; color:#f9f6f2; }
+
+  .overlay {
+    position: absolute; inset: 0; border-radius: 8px; z-index: 10;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; opacity: 0; pointer-events: none; transition: opacity .4s;
+  }
+  .overlay.show { opacity: 1; pointer-events: auto; }
+  .overlay.win  { background: rgba(237,194,46,.55); }
+  .overlay.lose { background: rgba(238,228,218,.73); }
+  .overlay .msg { font-size: 42px; font-weight: 800; color: #776e65; }
+  .overlay.win .msg { color: #f9f6f2; text-shadow: 0 2px 8px rgba(0,0,0,.25); }
+
+  footer { margin-top: 16px; font-size: 13px; color: #a79b8d; text-align: center; line-height: 1.8; }
+  kbd {
+    background: #eee4da; border-radius: 4px; padding: 1px 7px;
+    font-family: inherit; font-size: 12px; color: #776e65;
+  }
+  @media (max-width: 400px) { h1 { font-size: 48px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>2048</h1>
+    <div class="scores">
+      <div class="score-box"><div class="label">分数</div><div class="value" id="score">0</div></div>
+      <div class="score-box"><div class="label">最高分</div><div class="value" id="best">0</div></div>
+    </div>
+  </header>
+  <div class="sub">
+    <p>合并相同数字，凑出 <b>2048</b>！</p>
+    <button class="btn" id="restart">重新开始</button>
+  </div>
+  <div class="board" id="board">
+    <div class="grid-bg">
+      <div></div><div></div><div></div><div></div>
+      <div></div><div></div><div></div><div></div>
+      <div></div><div></div><div></div><div></div>
+      <div></div><div></div><div></div><div></div>
+    </div>
+    <div class="tiles" id="tiles"></div>
+    <div class="overlay" id="overlay">
+      <div class="msg" id="overlayMsg"></div>
+      <button class="btn" id="overlayBtn">再来一局</button>
+    </div>
+  </div>
+  <footer>
+    <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> 或 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动 · 手机上直接滑动
+  </footer>
+</div>
+
+<script>
+(() => {
+  const SIZE = 4;
+  const ANIM_MS = 130;
+  const tilesEl = document.getElementById('tiles');
+  const boardEl = document.getElementById('board');
+  const scoreEl = document.getElementById('score');
+  const bestEl  = document.getElementById('best');
+  const overlay = document.getElementById('overlay');
+  const overlayMsg = document.getElementById('overlayMsg');
+  const overlayBtn = document.getElementById('overlayBtn');
+
+  let grid, score, best, won, over, nextId;
+  best = +(localStorage.getItem('best2048') || 0);
+  bestEl.textContent = best;
+
+  const gap = () => parseFloat(getComputedStyle(boardEl).getPropertyValue('--gap'));
+  const cellW = () => (tilesEl.clientWidth - gap() * (SIZE - 1)) / SIZE;
+  const posTransform = (r, c) => {
+    const pitch = cellW() + gap();
+    return `translate(${c * pitch}px, ${r * pitch}px)`;
+  };
+  const fontSizeFor = v => {
+    const w = cellW(), d = String(v).length;
+    const ratio = d <= 2 ? .45 : d === 3 ? .38 : d === 4 ? .30 : .24;
+    return w * ratio;
+  };
+
+  function newGame() {
+    grid = Array.from({length: SIZE}, () => Array(SIZE).fill(null));
+    score = 0; won = false; over = false; nextId = 1;
+    scoreEl.textContent = '0';
+    tilesEl.innerHTML = '';
+    overlay.className = 'overlay';
+    spawnTile(); spawnTile();
+  }
+
+  function emptyCells() {
+    const cells = [];
+    for (let r = 0; r < SIZE; r++)
+      for (let c = 0; c < SIZE; c++)
+        if (!grid[r][c]) cells.push([r, c]);
+    return cells;
+  }
+
+  function spawnTile() {
+    const cells = emptyCells();
+    if (!cells.length) return;
+    const [r, c] = cells[Math.random() * cells.length | 0];
+    const tile = { id: nextId++, value: Math.random() < .9 ? 2 : 4, r, c, el: null };
+    grid[r][c] = tile;
+    renderTile(tile);
+  }
+
+  function renderTile(tile) {
+    const el = document.createElement('div');
+    el.className = 'tile spawn';
+    const w = cellW();
+    el.style.width = el.style.height = w + 'px';
+    el.style.transform = posTransform(tile.r, tile.c);
+    el.innerHTML = `<div class="inner ${tile.value <= 2048 ? 't' + tile.value : 'tsuper'}" style="font-size:${fontSizeFor(tile.value)}px">${tile.value}</div>`;
+    tilesEl.appendChild(el);
+    tile.el = el;
+    el.addEventListener('animationend', () => el.classList.remove('spawn'), {once: true});
+  }
+
+  function updateTileVisual(tile) {
+    tile.el.innerHTML = `<div class="inner ${tile.value <= 2048 ? 't' + tile.value : 'tsuper'}" style="font-size:${fontSizeFor(tile.value)}px">${tile.value}</div>`;
+    tile.el.classList.add('merged');
+    tile.el.addEventListener('animationend', () => tile.el.classList.remove('merged'), {once: true});
+  }
+
+  // dir: 0=up 1=right 2=down 3=left
+  function move(dir) {
+    if (over) return;
+    const vertical = dir === 0 || dir === 2;
+    const reverse  = dir === 1 || dir === 2;
+    let moved = false, gained = 0;
+    const keepers = [];
+    const absorbed = [];
+
+    for (let i = 0; i < SIZE; i++) {
+      const line = [];
+      for (let j = 0; j < SIZE; j++) {
+        const idx = reverse ? SIZE - 1 - j : j;
+        const t = vertical ? grid[idx][i] : grid[i][idx];
+        if (t) line.push(t);
+      }
+      const result = [];
+      for (let k = 0; k < line.length; k++) {
+        const keeper = line[k];
+        if (k + 1 < line.length && keeper.value === line[k + 1].value) {
+          keeper.value *= 2;
+          gained += keeper.value;
+          keepers.push(keeper);
+          absorbed.push({tile: line[k + 1], target: keeper});
+          k++;
+        }
+        result.push(keeper);
+      }
+      for (let j = 0; j < SIZE; j++) {
+        const idx = reverse ? SIZE - 1 - j : j;
+        const t = result[j] || null;
+        if (vertical) grid[idx][i] = t; else grid[i][idx] = t;
+        if (t) {
+          const nr = vertical ? idx : i, nc = vertical ? i : idx;
+          if (t.r !== nr || t.c !== nc) { t.r = nr; t.c = nc; moved = true; }
+        }
+      }
+    }
+    if (absorbed.length) moved = true;
+    if (!moved) return;
+
+    for (let r = 0; r < SIZE; r++)
+      for (let c = 0; c < SIZE; c++)
+        if (grid[r][c]) grid[r][c].el.style.transform = posTransform(r, c);
+    absorbed.forEach(({tile, target}) => {
+      tile.el.style.transform = posTransform(target.r, target.c);
+    });
+
+    setTimeout(() => {
+      absorbed.forEach(({tile}) => tile.el.remove());
+      keepers.forEach(updateTileVisual);
+
+      if (gained) {
+        score += gained;
+        scoreEl.textContent = score;
+        const add = document.createElement('div');
+        add.className = 'score-add';
+        add.textContent = '+' + gained;
+        scoreEl.parentElement.appendChild(add);
+        setTimeout(() => add.remove(), 600);
+        if (score > best) {
+          best = score;
+          bestEl.textContent = best;
+          localStorage.setItem('best2048', best);
+        }
+      }
+
+      spawnTile();
+
+      if (!won && keepers.some(t => t.value === 2048)) {
+        won = true;
+        showOverlay('win', '你赢了！', '继续挑战');
+      } else if (!canMove()) {
+        over = true;
+        showOverlay('lose', '游戏结束', '再来一局');
+      }
+    }, ANIM_MS);
+  }
+
+  function canMove() {
+    if (emptyCells().length) return true;
+    for (let r = 0; r < SIZE; r++)
+      for (let c = 0; c < SIZE; c++) {
+        const v = grid[r][c].value;
+        if (r + 1 < SIZE && grid[r + 1][c].value === v) return true;
+        if (c + 1 < SIZE && grid[r][c + 1].value === v) return true;
+      }
+    return false;
+  }
+
+  function showOverlay(type, msg, btnText) {
+    overlayMsg.textContent = msg;
+    overlayBtn.textContent = btnText;
+    overlay.className = 'overlay show ' + type;
+  }
+
+  overlayBtn.addEventListener('click', () => {
+    if (overlay.classList.contains('win') && !over) {
+      overlay.className = 'overlay';
+    } else {
+      newGame();
+    }
+  });
+  document.getElementById('restart').addEventListener('click', newGame);
+
+  const keyMap = {
+    ArrowUp: 0, ArrowRight: 1, ArrowDown: 2, ArrowLeft: 3,
+    w: 0, d: 1, s: 2, a: 3, W: 0, D: 1, S: 2, A: 3
+  };
+  document.addEventListener('keydown', e => {
+    if (e.key in keyMap) {
+      e.preventDefault();
+      move(keyMap[e.key]);
+    }
+  });
+
+  let tsx = 0, tsy = 0;
+  boardEl.addEventListener('touchstart', e => {
+    tsx = e.touches[0].clientX;
+    tsy = e.touches[0].clientY;
+  }, {passive: true});
+  boardEl.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - tsx;
+    const dy = e.changedTouches[0].clientY - tsy;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+    move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0));
+  });
+
+  window.addEventListener('resize', () => {
+    if (!grid) return;
+    const w = cellW();
+    for (let r = 0; r < SIZE; r++)
+      for (let c = 0; c < SIZE; c++) {
+        const t = grid[r][c];
+        if (t) {
+          t.el.style.width = t.el.style.height = w + 'px';
+          t.el.style.transform = posTransform(r, c);
+          t.el.querySelector('.inner').style.fontSize = fontSizeFor(t.value) + 'px';
+        }
+      }
+  });
+
+  newGame();
+})();
+</script>
+</body>
+</html>
